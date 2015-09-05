@@ -5,7 +5,7 @@ var fs = require('fs');
 
 var page = null;
 var VISIT_HISTORY = {};
-var VISIT_INTERVAL = 30000;
+var VISIT_INTERVAL = 10000;
 var urlVisitedCount = 0;
 var searchTerms = "entre 25 et 30 ans";
 var ville = null;
@@ -169,7 +169,7 @@ page.open("https://www.adopteunmec.com/", function (status) {
 function searchAndVisit(){
 	
 	setTimeout(function () {
-		console.log("SEARCH : "+ searchTerms +" .....");
+		console.log("SEARCH : "+ searchTerms );
 		var SEARCH_RESULT_COUNT = 24;
 		
 		if (ville){
@@ -251,13 +251,13 @@ function searchAndVisit(){
 		// VISIT ALL PROFILES
 		console.log("VISIT...");
 		
-		function visitProfile(profiles){
+		function visitProfiles(profiles){
 			var profile = null;
 			var now = new Date();
 			var SAME_PROFILE_INTERVAL = 3;
 			var sameProfileIntervalTimestamp = now.setDate(now.getDate() + SAME_PROFILE_INTERVAL);
 			sameProfileIntervalTimestamp = ~~(sameProfileIntervalTimestamp / 1000);
-			while(((profile = profiles.shift()) && profile.pertinence < 33 ) || (VISIT_HISTORY[profile.id] < sameProfileIntervalTimestamp) );
+			while(((profile = profiles.shift()) && profile.pertinence < 33 ) || (profile && (VISIT_HISTORY[profile.id] < sameProfileIntervalTimestamp) ));
 			if(!profile){
 				console.log("DONE.");
 				phantom.exit(0);
@@ -265,15 +265,15 @@ function searchAndVisit(){
 			
 			var url = "https://www.adopteunmec.com" + profile.url;
 			
-				page.open( url, function (status) {
-					var profile = null;
-					
-					if(status !== "success") {
-						var profileId = page.url.split("/").pop(); //can get profiled from profile.id
-						saveFailedPage('failed_profile_' + profileId);
-					}
-					setTimeout(visitProfile.bind(this,profile,profiles), getRandomVisitInterval(10000,VISIT_INTERVAL));
-				});
+			page.open( url, function (status) {
+				var profile = null;
+				
+				if(status !== "success") {
+					var profileId = page.url.split("/").pop(); //can get profiled from profile.id
+					saveFailedPage('failed_profile_' + profileId);
+				}
+				setTimeout(visitProfiles.bind(this,profiles), getRandomVisitInterval(5000,VISIT_INTERVAL));
+			});
 		}
 		visitProfiles(rez.members);
 		

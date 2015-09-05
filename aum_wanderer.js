@@ -11,7 +11,7 @@ var searchTerms = "entre 25 et 30 ans";
 var ville = null;
 var HISTORY_FOLDER_PATH = 'history';
 var FAILED_FOLDER_PATH = "failed";
-
+var PROFILE_HISTORY_FILEPATH = "history.csv";
 var SEP = (system.os.name === "windows") ? "\\": "/";
 
 
@@ -44,6 +44,28 @@ if(PASSWORD.length < 1){
 	error("Bad password");
 }
 
+try{
+	//read history db
+	var profileDb = fs.read(PROFILE_HISTORY_FILEPATH);
+	var VISIT_HISTORY = profileDb.split("\n").reduce(function(profileMap, line){
+		if(line === "")
+			return profileMap;
+		var entry = line.split(";");
+		var profileId = entry[0];
+		var timestamp = +entry[1];
+		if(profileId in profileMap){
+			if(timestamp > profileMap[profileId])
+				profileMap[profileId] = timestamp;
+		}
+		else {
+			profileMap[profileId] = timestamp;
+		}
+		return profileMap;
+	}, {});
+}
+catch(ex){
+	
+}
 
 try {
 	fs.removeTree(HISTORY_FOLDER_PATH);
@@ -90,7 +112,7 @@ page.onLoadFinished = function(status) {
 		try{
 			var profileId = page.url.split("/").pop();
 			var logEntry = profileId + ";" + ~~(new Date().getTime() /1000);
-			fs.write("history.csv", logEntry + "\n",  'a');
+			fs.write(PROFILE_HISTORY_FILEPATH, logEntry + "\n",  'a');
 		}
 		catch(e){}
 	}
@@ -147,8 +169,7 @@ page.open("https://www.adopteunmec.com/", function (status) {
 function searchAndVisit(){
 	
 	setTimeout(function () {
-		console.log("SEARCH.....");
-		console.log("Terms : " + searchTerms);
+		console.log("SEARCH : "+ searchTerms +" .....");
 		var SEARCH_RESULT_COUNT = 24;
 		
 		if (ville){
@@ -230,30 +251,31 @@ function searchAndVisit(){
 		// VISIT ALL PROFILES
 		console.log("VISIT...");
 		
-		function visitProfile(url,profiles){
-				url = "https://www.adopteunmec.com" + url;
+		function visitProfile(profiles){
+			var profile = null;
+			var now = new Date();
+			var SAME_PROFILE_INTERVAL = 3;
+			var sameProfileIntervalTimestamp = now.setDate(now.getDate() + SAME_PROFILE_INTERVAL);
+			sameProfileIntervalTimestamp = ~~(sameProfileIntervalTimestamp / 1000);
+			while(((profile = profiles.shift()) && profile.pertinence < 33 ) || (VISIT_HISTORY[profile.id] < sameProfileIntervalTimestamp) );
+			if(!profile){
+				console.log("DONE.");
+				phantom.exit(0);
+			}
+			
+			var url = "https://www.adopteunmec.com" + profile.url;
+			
 				page.open( url, function (status) {
 					var profile = null;
-					while((profile = profiles.shift()) && profile.pertinence < 33);
-					if(!profile){
-						console.log("DONE.");
-						phantom.exit(0);
-					}
+					
 					if(status !== "success") {
-						var profileId = page.url.split("/").pop();
-						VISIT_HISTORY[profileId] = Math.floor(Date.now() / 1000);
+						var profileId = page.url.split("/").pop(); //can get profiled from profile.id
 						saveFailedPage('failed_profile_' + profileId);
 					}
-					setTimeout(visitProfile.bind(this,profile.url,profiles), getRandomVisitInterval(10000,VISIT_INTERVAL));
+					setTimeout(visitProfile.bind(this,profile,profiles), getRandomVisitInterval(10000,VISIT_INTERVAL));
 				});
 		}
-		var profile = null;
-		while((profile = rez.members.shift()) && profile.pertinence < 33);
-		if(!profile){
-			console.log("DONE.");	
-			phantom.exit(0);			
-		}
-		visitProfile(profile.url, rez.members);
+		visitProfiles(rez.members);
 		
 	}, 2000);
 }

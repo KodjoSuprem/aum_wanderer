@@ -1,37 +1,49 @@
-// Upload an image to imagebin.org
-//var USERNAME=  'miniscalope@gmail.com';//'codjovi@free.fr';
-//var PASSWORD = 'pCd14sVk';
-
-var USERNAME=  'ponyblue@live.fr';
-var PASSWORD = 'sebastien';
-
-var VISIT_HISTORY = {};
-var VISIT_INTERVAL = 20000;
-var urlVisitedCount = 0;
-
-var searchTerms = "entre 25 et 30 ans";
-var page = require('webpage').create();
+var webpage = require('webpage');
 var system = require('system');
 var fs = require('fs');
 
-page.settings.userAgent = 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2062.120 Safari/537.36';
-//page.loadImages  = false;
 
-var dayDate = new Date();
-dayDate = dayDate.getDate() + "-" + dayDate.getMonth() + "-" + dayDate.getFullYear();
+var page = null;
+var VISIT_HISTORY = {};
+var VISIT_INTERVAL = 30000;
+var urlVisitedCount = 0;
+var searchTerms = "entre 25 et 30 ans";
+var ville = null;
 var HISTORY_FOLDER_PATH = 'history';
 var FAILED_FOLDER_PATH = "failed";
 
+var SEP = (system.os.name === "windows") ? "\\": "/";
+
+
+function error(msg){
+	console.log("ERROR: " + msg);
+	phantom.exit(1);
+}
 
 if (system.args.length < 2) {
-   console.log("Argument missing");
-   phantom.exit(1);
+   error("Arguments missing");
 }
 if (system.args.length > 2) {
     searchTerms = system.args[3];
 }
-USERNAME = system.args[1];
-PASSWORD = system.args[2];
+if (system.args.length > 3) {
+    ville = system.args[4];
+}
+var USERNAME = system.args[1];
+var PASSWORD = system.args[2];
+
+if(searchTerms.length < 1){
+	error("No search terms");
+}
+
+if(!/\S+@\S+\.\S+/.test(USERNAME)){
+	error("Bad user name");
+}
+
+if(PASSWORD.length < 1){
+	error("Bad password");
+}
+
 
 try {
 	fs.removeTree(HISTORY_FOLDER_PATH);
@@ -41,6 +53,11 @@ catch(ex){
 }
 if(!fs.makeDirectory(HISTORY_FOLDER_PATH)){
 	console.log("Cannot create history folder : "+ HISTORY_FOLDER_PATH);
+}
+
+function getDayDate() {
+	var dayDate = new Date();
+	return dayDate.getDate() + "_" + dayDate.getMonth() + "_" + dayDate.getFullYear();
 }
 
 function printArgs() {
@@ -53,35 +70,49 @@ function getRandomVisitInterval(min, max){
 	return Math.floor((Math.random() * max) + min);	
 }
 
+
 function saveFailedPage(name){
-	page.render(FAILED_FOLDER_PATH +"\\" + name+'.jpeg', {format: 'jpeg', quality: '100'});
+	page.render(FAILED_FOLDER_PATH + SEP+ name+'.jpeg', {format: 'jpeg', quality: '100'});
 }
 
 function savePage(){
-	page.render(HISTORY_FOLDER_PATH +"\\" +urlVisitedCount+'.jpeg', {format: 'jpeg', quality: '100'});
+	page.render(HISTORY_FOLDER_PATH +SEP + urlVisitedCount + '.jpeg', {format: 'jpeg', quality: '100'});
 }
 
-page.onLoadFinished = function() {
-    console.log("page.onLoadFinished : "+arguments[0]);
+var page = webpage.create();
+page.settings.userAgent = 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2062.120 Safari/537.36';
+//page.loadImages  = false;
+
+page.onLoadFinished = function(status) {
+    console.log("page.onLoadFinished : " + status);
 	urlVisitedCount++;
+	if(page.url.indexOf("profile") !== -1 ){
+		try{
+			var profileId = page.url.split("/").pop();
+			var logEntry = profileId + ";" + ~~(new Date().getTime() /1000);
+			fs.write("history.csv", logEntry + "\n",  'a');
+		}
+		catch(e){}
+	}
 	savePage();
 
 };
 
-page.onUrlChanged = function() {
+page.onUrlChanged = function(url) {
     console.log("page.onUrlChanged");
 	if(WANDERER_STATE == "WAIT_FOR_LOGIN"){
-		if(arguments[0] === "https://www.adopteunmec.com/home"){
+		if(url === "https://www.adopteunmec.com/home"){
 			WANDERER_STATE = "SEARCH_AND_VISIT";
 			searchAndVisit();
-		}else{
-			 console.log("LOGIN FAILED");
-			 saveFailedPage('login_'+USERNAME);
-			 phantom.exit(0);
+		} else { 
+		
+			saveFailedPage('login_'+USERNAME);
+			error("LOGIN FAILED");
+
 		}
 	}
-   // printArgs.apply(this, arguments);
-  console.log("    " + arguments[0]);
+	// printArgs.apply(this, arguments);
+	console.log("    " + url);
 };
 
 page.onConsoleMessage = function(msg, lineNum, sourceId) {
@@ -93,9 +124,8 @@ var WANDERER_STATE ="";
 console.log("LOGIN.....");
 page.open("https://www.adopteunmec.com/", function (status) {
 	if(status !== "success") {
-		console.log("Cannot acces login page");
 		saveFailedPage('login_'+USERNAME);
-		phantom.exit(0);
+		error("Cannot access login page");
 	}
 	console.log("Log in with "+ USERNAME + " - " + PASSWORD);
 	page.evaluate(function (USERNAME,PASSWORD) {
@@ -120,49 +150,91 @@ function searchAndVisit(){
 		console.log("SEARCH.....");
 		console.log("Terms : " + searchTerms);
 		var SEARCH_RESULT_COUNT = 24;
-		var searchMoreUrl = "https://www.adopteunmec.com/gogole/more?count=" + SEARCH_RESULT_COUNT + "&q=" + encodeURIComponent(searchTerms);
-			var rez = page.evaluate(function (searchMoreUrl, searchTerms, SEARCH_RESULT_COUNT) {
-				var offset = 0;
-				var profiles= [];
-				var filteredProfiles = [];
-				var totalCount = 0;
-				do {
-					var searchUrl = searchMoreUrl + "&offset=" + offset;
-					 $.ajax({
-						async: false,
-						url: searchUrl,
-						error: function(a,b,c){
-							
-						},
-						success: function (data) {
-							if('members' in data){
-								filteredProfiles = data.members;
-								totalCount = data.total;
-							} else {
-								filteredProfiles = data;
-							}
-							filteredProfiles = filteredProfiles.filter(function(item) { if(item.id !== '110958385' && item.dead !== true) return item; });
-							profiles = profiles.concat(filteredProfiles);
-						}
-					});
-					offset += SEARCH_RESULT_COUNT;
-					
-					var waitTime = new Date().getTime() + Math.floor((Math.random() * 30000) + 10000);
-					
-					while (waitTime >= new Date().getTime()) {
-					}
 		
+		if (ville){
+			console.log("Test ville first : " + ville);
+			var testVilleUrl = "https://www.adopteunmec.com/gogole/more?count=" + SEARCH_RESULT_COUNT + "&q=" + encodeURIComponent(ville);
+			var rez = page.evaluate(function (testUrl) {
+				var rez = {};
+				 $.ajax({
+					async: false,
+					url: testUrl,
+					error: function(a,b,c){
+						
+					},
+					success: function (data) {
+						//console.log(data);
+						rez = data;
+					}
+				});
+				return rez;
+			}, testVilleUrl);
+			
+			if("message" in rez){
+				error("Ville not found " + ville);
+			} else {
+				if (rez.members[0].city.length !== ville.length)
+					error("Ville not found " + ville + " <> " + rez.members[0].city);
+				console.log("Ville found");
+				var waitTime = new Date().getTime() + 2000; //wait for 2 sec before visiting
+				while (waitTime >= new Date().getTime()) {
 				}
-				while( filteredProfiles.length > 0 && filteredProfiles[0] !== 0);
-				return { totalCount : totalCount , profiles : profiles };
-			}, searchMoreUrl, searchTerms, SEARCH_RESULT_COUNT);
-		console.log("Fetch result : "+ rez.profiles.length + "/" + rez.totalCount);
+			}
+		}
+		var searchMoreUrl = "https://www.adopteunmec.com/gogole/more?count=" + SEARCH_RESULT_COUNT + "&q=" + encodeURIComponent(searchTerms);
+		var rez = page.evaluate(function (searchMoreUrl, SEARCH_RESULT_COUNT) {
+			var offset = 0;
+			var profiles = null;
+			var end = false;
+			do {
+				var searchUrl = searchMoreUrl + "&offset=" + offset;
+				 $.ajax({
+					async: false,
+					url: searchUrl,
+					error: function(a,b,c){
+						
+					},
+					success: function (data) {
+						var filterFunction = function(item) { if(item.id !== '110958385' && item.dead !== true) return item; };
+						var profileList = [];
+						if('members' in data){
+							profiles = data;
+							profileList = data.members;
+							profiles.members = profileList.filter(filterFunction);
+						} else {
+							profileList = data;
+							profiles.members = profiles.members.concat(profileList.filter(filterFunction));
+						}
+						end = (profileList.length < 1 || profileList[0] === 0);
+					}
+				});
+				if(profiles.message)
+					break;
+				offset += SEARCH_RESULT_COUNT;
+				
+				//synchronous wait
+				var waitTime = new Date().getTime() + Math.floor(Math.random() * 1000);
+				while (waitTime >= new Date().getTime()) {
+				}
+	
+			}
+			while(!end);
+			return profiles;
+		}, searchMoreUrl, SEARCH_RESULT_COUNT);
+		if(rez.message){
+			console.log("Fetch result contains a message: " + rez.message);
+			console.log("visit only first batch of profiles...");
+		}
+		
+		console.log("Fetch result : "+ rez.members.length + "/" + rez.total);
 		// VISIT ALL PROFILES
 		console.log("VISIT...");
+		
 		function visitProfile(url,profiles){
 				url = "https://www.adopteunmec.com" + url;
 				page.open( url, function (status) {
-					var profile = profiles.shift();
+					var profile = null;
+					while((profile = profiles.shift()) && profile.pertinence < 33);
 					if(!profile){
 						console.log("DONE.");
 						phantom.exit(0);
@@ -175,12 +247,13 @@ function searchAndVisit(){
 					setTimeout(visitProfile.bind(this,profile.url,profiles), getRandomVisitInterval(10000,VISIT_INTERVAL));
 				});
 		}
-		var profile = rez.profiles.shift();
+		var profile = null;
+		while((profile = rez.members.shift()) && profile.pertinence < 33);
 		if(!profile){
-			console.log("DONE.");
-			phantom.exit(0);
+			console.log("DONE.");	
+			phantom.exit(0);			
 		}
-		visitProfile(profile.url, rez.profiles);
-
+		visitProfile(profile.url, rez.members);
+		
 	}, 2000);
 }

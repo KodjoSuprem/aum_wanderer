@@ -192,11 +192,11 @@ function searchAndVisit(){
 			}, testVilleUrl);
 			
 			if("message" in rez){
-				error("Ville not found " + ville);
+				error("ville not found " + ville);
 			} else {
 				if (rez.members[0].city.length !== ville.length)
-					error("Ville not found " + ville + " <> " + rez.members[0].city);
-				console.log("Ville found");
+					error("ville not found " + ville + " <> " + rez.members[0].city);
+				console.log("ville found");
 				var waitTime = new Date().getTime() + 2000; //wait for 2 sec before visiting
 				while (waitTime >= new Date().getTime()) {
 				}

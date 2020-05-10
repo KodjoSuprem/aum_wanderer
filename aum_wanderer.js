@@ -210,7 +210,7 @@ function visitProfiles(profiles){
 		
 		if(status !== "success") {
 			var profileId = page.url.split("/").pop(); //can get profiled from profile.id
-			saveFailedPage('failed_profile_' + profileId);
+			//saveFailedPage('failed_profile_' + profileId);
 		}
 		setTimeout(visitProfiles.bind(this,profiles), getRandomVisitInterval(5000,VISIT_INTERVAL));
 	});
@@ -345,7 +345,7 @@ function searchAndVisit(){
 						
 					},
 					success: function (data) {
-						var filterFunction = function(item) { if(item.id != null && item.id !== '15145279' && item.id !== '11707311' && item.dead !== true) return item; };
+						var filterFunction = function(item) { if(item.id != null && item.id !== '111159726' && item.id !== '114779627' && item.id !== '15145279' && item.id !== '11707311' && item.dead !== true) return item; };
 						var profileList = [];
 						if('members' in data){
 							profiles = data;
